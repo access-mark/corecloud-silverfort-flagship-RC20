@@ -2,7 +2,8 @@
   const TYPE_LABELS={
     WORKLOAD_VENUE:'Workload Venue Assessment',
     SOVEREIGNTY:'Digital Sovereignty Assessment',
-    AI_READINESS:'AI Readiness Assessment'
+    AI_READINESS:'AI Readiness Assessment',
+    SILVERFORT_IDENTITY:'Silverfort Identity Security Risk Assessment'
   };
   function classify(type, score){
     const generic=[
@@ -33,6 +34,7 @@
     const maps={
       WORKLOAD_VENUE:['Workload placement should be governed through economics, sovereignty and capability rather than vendor preference.','Build a structured workload inventory and classify workloads by criticality, data sensitivity and operating requirements.','Proceed to a formal Workload Venue Assessment and executive venue roadmap.'],
       SOVEREIGNTY:['Sovereignty maturity depends on visibility across jurisdiction, residency, access, control and recoverability.','Prioritise provider dependency mapping, privileged access review and recoverability planning.','Proceed to a formal Sovereignty Assessment and governance review.'],
+      SILVERFORT_IDENTITY:['Reported identity control gaps should be verified against real authentication paths and exceptions.','Prioritise privileged MFA, legacy authentication and service-account discovery based on the responses.','Arrange a scoped Silverfort identity-security technical discussion.'],
       AI_READINESS:['AI success depends on readiness across data, infrastructure, governance, capability and operations.','Strengthen data governance and AI accountability before scaling AI adoption.','Proceed to a formal AI Readiness Assessment and executive AI roadmap.']
     };
     return maps[type]||maps.WORKLOAD_VENUE;
@@ -73,14 +75,21 @@
       const selected=questions.map(q=>q.querySelector('input:checked'));
       if(questions.length===0||selected.some(x=>!x)){const first=questions.find(q=>!q.querySelector('input:checked'));first?.scrollIntoView({behavior:'smooth',block:'center'});first?.querySelector('input')?.focus();alert('Please answer every assessment question before calculating your result.');return;}
       const vals=selected.map(x=>parseInt(x.value,10));
-      if(vals.some(x=>!Number.isFinite(x)||x<0||x>4)){alert('Invalid assessment answer. Please review your selections.');return;}
-      const max=questions.length*4;
-      const score=Math.round((vals.reduce((a,b)=>a+b,0)/max)*100);
+      if(vals.some(x=>!Number.isFinite(x)||x<0||x>5)){alert('Invalid assessment answer. Please review your selections.');return;}
       const type=form.getAttribute('data-assessment-type')||'WORKLOAD_VENUE';
-      const [label,summary]=classify(type, score);
+      const isIdentity=type==='SILVERFORT_IDENTITY';
+      const known=vals.filter(v=>v!==5);
+      const unknown=vals.length-known.length;
+      const score=isIdentity?(known.length?Math.round(known.reduce((a,b)=>a+(4-b),0)/(known.length*4)*100):0):Math.round(vals.reduce((a,b)=>a+b,0)/(questions.length*4)*100);
+      const [label,summary]=isIdentity?(known.length?[score<25?'Lower indicated exposure':score<55?'Moderate indicated exposure':'Higher indicated exposure','Indicative exposure among '+known.length+' assessed controls. '+unknown+' unverified controls require validation; unknowns are excluded from the index.']:['Insufficient evidence','All controls were marked unknown. No meaningful exposure index can be calculated.']):classify(type,score);
       const result=document.querySelector('[data-result-wrap]');
-      const f=finding(type);
-      document.querySelector('[data-score]').textContent=score;
+      let f=finding(type);
+      if(isIdentity){
+        const themes=[['Privileged MFA and access',[4,7,8,9,11]],['Legacy authentication and MFA',[1,5,9]],['Service and non-human identities',[12,13,14,15]],['Identity threat readiness',[16,17,18,19]],['Hybrid identity visibility',[0,2,3]]];
+        const ranked=themes.map(([name,ids])=>({name,gaps:ids.filter(i=>vals[i]===1).length,partial:ids.filter(i=>vals[i]===3).length,unknown:ids.filter(i=>vals[i]===5).length})).sort((a,b)=>(b.gaps*3+b.partial)-(a.gaps*3+a.partial));
+        f=[ranked[0].name+': '+ranked[0].gaps+' reported gaps and '+ranked[0].partial+' partial controls.', 'Validate the highest-priority identity control exceptions and '+unknown+' unverified controls before determining remediation.', 'Request a Silverfort technical discovery focused on '+ranked.slice(0,2).map(x=>x.name.toLowerCase()).join(' and ')+'.'];
+      }
+      document.querySelector('[data-score]').textContent=(isIdentity&&!known.length)?'N/A':score;
       document.querySelector('[data-classification]').textContent=label;
       document.querySelector('[data-summary]').textContent=summary;
       document.querySelector('[data-finding1]').textContent=f[0];
